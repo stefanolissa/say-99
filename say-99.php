@@ -22,6 +22,7 @@ if (!defined('SAY99_MAIN'))
 class Say99 {
 
     var $log_file;
+    var $current_mem;
 
     public function __construct() {
 
@@ -58,46 +59,63 @@ class Say99 {
 
         add_action('muplugins_loaded', function () {
             $this->log('muplugins_loaded');
-        }, 1000);
+        }, 10000);
 
         add_action('plugin_loaded', function ($plugin) {
             $this->log('plugin_loaded: ' . $plugin);
-        }, 1000);
+        }, 10000);
 
         add_action('plugins_loaded', function () {
-            $this->log('plugins_loaded');
-        }, 1000);
+            $this->current_mem = memory_get_usage();
+            $this->log('plugins_loaded: start');
+        }, -1);
+
+        add_action('plugins_loaded', function () {
+            $this->log('plugins_loaded: end - ' . size_format(memory_get_usage()-$this->current_mem, 1));
+        }, 10000);
 
         add_action('setup_theme', function () {
-            $this->log('setup_theme');
+            $this->current_mem = memory_get_usage();
+            $this->log('setup_theme: start');
             $this->log_callbacks('setup_theme');
-        }, 1000);
+        }, -1);
+        
+        add_action('setup_theme', function () {
+            $this->log('setup_theme: end - ' . size_format(memory_get_usage()-$this->current_mem, 1));
+            $this->log_callbacks('setup_theme');
+        }, 10000);
 
         add_action('after_setup_theme', function () {
-            $this->log('after_setup_theme');
+            $this->current_mem = memory_get_usage();
+            $this->log('after_setup_theme: start');
             $this->log_callbacks('after_setup_theme');
-        }, 1000);
+        }, -1);
+        
+        add_action('after_setup_theme', function () {
+            $this->log('after_setup_theme: end - ' . size_format(memory_get_usage()-$this->current_mem, 1));
+            $this->log_callbacks('after_setup_theme');
+        }, 10000);
 
         add_action('init', function () {
             $this->log('init');
             //$this->log_callbacks('init');
-        }, 1000);
+        }, 10000);
 
         add_action('wp_loaded', function () {
             $this->log('wp_loaded');
-        }, 1000);
+        }, 10000);
 
         add_action('template_redirect', function () {
             $this->log('template_redirect');
-        }, 1000);
+        }, 10000);
 
         add_action('admin_init', function () {
             $this->log('admin_init');
-        }, 1000);
+        }, 10000);
 
         add_action('shutdown', function () {
             $this->log('shutdown');
-        }, 1000);
+        }, 10000);
 
 //        add_action('all', function($tag) {
 //            static $running = false;
@@ -112,12 +130,12 @@ class Say99 {
 
         add_filter('transient_doing_cron', function($value, $transient) {
             $this->log('Starting cron (transient_doing_cron)');
-        }, 1000, 2);
+        }, 10000, 2);
 
         add_filter('pre_unschedule_event', function($value, $timestamp, $hook, $args) {
             $this->log('Starting event: ' . $hook);
             return $value;
-        }, 1000, 4);
+        }, 10000, 4);
     }
 
     function log_callbacks($tag) {
