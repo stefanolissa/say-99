@@ -19,6 +19,10 @@ if (!defined('SAY99_AJAX'))
 if (!defined('SAY99_MAIN'))
     define('SAY99_MAIN', false);
 
+function echo_mem() {
+    echo memory_get_usage(), "\n";
+}
+
 class Say99 {
 
     var $log_file;
@@ -71,7 +75,7 @@ class Say99 {
         }, -1);
 
         add_action('plugins_loaded', function () {
-            $this->log('plugins_loaded: end - ' . size_format(memory_get_usage()-$this->current_mem, 1));
+            $this->log('plugins_loaded: end - ' . size_format(memory_get_usage() - $this->current_mem, 1));
         }, 10000);
 
         add_action('setup_theme', function () {
@@ -79,10 +83,10 @@ class Say99 {
             $this->log('setup_theme: start');
             $this->log_callbacks('setup_theme');
         }, -1);
-        
+
         add_action('setup_theme', function () {
-            $this->log('setup_theme: end - ' . size_format(memory_get_usage()-$this->current_mem, 1));
-            $this->log_callbacks('setup_theme');
+            $this->log('setup_theme: end - ' . size_format(memory_get_usage() - $this->current_mem, 1));
+            //$this->log_callbacks('setup_theme');
         }, 10000);
 
         add_action('after_setup_theme', function () {
@@ -90,11 +94,28 @@ class Say99 {
             $this->log('after_setup_theme: start');
             $this->log_callbacks('after_setup_theme');
         }, -1);
-        
+
         add_action('after_setup_theme', function () {
-            $this->log('after_setup_theme: end - ' . size_format(memory_get_usage()-$this->current_mem, 1));
-            $this->log_callbacks('after_setup_theme');
+            $this->log('after_setup_theme: end - ' . size_format(memory_get_usage() - $this->current_mem, 1));
+            //$this->log_callbacks('after_setup_theme');
         }, 10000);
+
+        add_action('init', function () {
+            global $wp_filter;
+            $this->log('init: start');
+            return;
+            //$this->log_callbacks('init');
+            foreach ($wp_filter['init']->callbacks as $priority => $functions) {
+                if ($priority == -1)
+                    continue;
+                $new_functions = [];
+                foreach ($functions as $function) {
+                    $new_functions[] = $function;
+                    $new_functions[] = ['function' => 'echo_mem', 'accepted_args' => 1];
+                }
+                $wp_filter['init']->callbacks[$priority] = $new_functions;
+            }
+        }, -1);
 
         add_action('init', function () {
             $this->log('init');
@@ -145,6 +166,7 @@ class Say99 {
             foreach ($wp_filter[$tag]->callbacks as $priority => $functions) {
 
                 foreach ($functions as $function) {
+                    //var_dump($function);
                     $b .= '[' . $priority . '] ';
                     if (is_array($function['function'])) {
                         if (is_object($function['function'][0])) {
@@ -165,6 +187,25 @@ class Say99 {
             }
             $this->log($b);
         }
+    }
+
+    function function_to_string($function) {
+        $b = '';
+        if (is_array($function['function'])) {
+            if (is_object($function['function'][0])) {
+                $b .= get_class($function['function'][0]) . '::' . $function['function'][1];
+            } else {
+                $b .= $function['function'][0] . '::' . $function['function'][1];
+            }
+        } else {
+            if (is_object($function['function'])) {
+                $fn = new ReflectionFunction($function['function']);
+                $b .= get_class($fn->getClosureThis()) . '(closure)';
+            } else {
+                $b .= $function['function'];
+            }
+        }
+        return $b;
     }
 
     function log($text) {
