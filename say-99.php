@@ -70,12 +70,12 @@ class Say99 {
 
         add_action('setup_theme', function () {
             $this->log('setup_theme');
-            $this->log_callbacks('init');
+            $this->log_callbacks('setup_theme');
         }, 1000);
 
         add_action('after_setup_theme', function () {
             $this->log('after_setup_theme');
-            $this->log_callbacks('init');
+            $this->log_callbacks('after_setup_theme');
         }, 1000);
 
         add_action('init', function () {
