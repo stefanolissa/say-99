@@ -12,12 +12,16 @@
 
 if (!defined('SAY99_CRON'))
     define('SAY99_CRON', true);
+if (!defined('SAY99_LOG_APPEND'))
+    define('SAY99_LOG_APPEND', false);
 if (!defined('SAY99_ADMIN'))
     define('SAY99_ADMIN', true);
 if (!defined('SAY99_AJAX'))
     define('SAY99_AJAX', false);
 if (!defined('SAY99_MAIN'))
     define('SAY99_MAIN', false);
+if (!defined('SAY99_ANALYZE_FUNCTIONS'))
+    define('SAY99_ANALYZE_FUNCTIONS', false);
 
 function echo_mem() {
     echo memory_get_usage(), "\n";
@@ -25,8 +29,11 @@ function echo_mem() {
 
 class Say99 {
 
+    const SEPARATOR = '=========================================================';
+
     var $log_file;
     var $current_mem;
+    var $function_mem;
 
     public function __construct() {
 
@@ -50,7 +57,12 @@ class Say99 {
             $this->log_file = WP_CONTENT_DIR . '/logs/say-99/main.txt';
         }
 
-        $this->log('------------------------------------------------------------');
+        if (!SAY99_LOG_APPEND) {
+            unlink($this->log_file);
+        }
+
+        $this->log(self::SEPARATOR);
+        $this->log(self::SEPARATOR);
         $this->log('Note: we cannot intercept plugins loaded before us');
 
         add_action('mu_plugin_loaded', function ($plugin) {
@@ -71,6 +83,7 @@ class Say99 {
 
         add_action('plugins_loaded', function () {
             $this->current_mem = memory_get_usage();
+            $this->log(self::SEPARATOR);
             $this->log('plugins_loaded: start');
         }, -1);
 
@@ -79,20 +92,62 @@ class Say99 {
         }, 10000);
 
         add_action('setup_theme', function () {
+            global $wp_filter;
+            $this->log(self::SEPARATOR);
             $this->current_mem = memory_get_usage();
             $this->log('setup_theme: start');
-            $this->log_callbacks('setup_theme');
+            //$this->log_callbacks('setup_theme');
+            if (SAY99_ANALYZE_FUNCTIONS) {
+                foreach ($wp_filter['setup_theme']->callbacks as $priority => $functions) {
+                    $this->function_mem = memory_get_usage();
+                    if ($priority == -1 || $priority == 10000)
+                        continue;
+                    $new_functions = [];
+                    foreach ($functions as $function) {
+                        $new_functions[] = $function;
+                        $x = $this->function_to_string($function);
+                        $new_functions[] = ['function' => function() use ($x) {
+                                $this->log($x . ' - ' . size_format(memory_get_usage() - $this->function_mem, 1));
+                                $this->function_mem = memory_get_usage();
+                            }, 'accepted_args' => 1];
+                    }
+                    $wp_filter['setup_theme']->callbacks[$priority] = $new_functions;
+                }
+            }
         }, -1);
 
         add_action('setup_theme', function () {
             $this->log('setup_theme: end - ' . size_format(memory_get_usage() - $this->current_mem, 1));
+            $this->log('Theme functions.php will be loaded');
             //$this->log_callbacks('setup_theme');
         }, 10000);
 
         add_action('after_setup_theme', function () {
+            global $wp_filter;
+
             $this->current_mem = memory_get_usage();
+
+            $this->log(self::SEPARATOR);
             $this->log('after_setup_theme: start');
-            $this->log_callbacks('after_setup_theme');
+            //$this->log_callbacks('after_setup_theme');
+            if (SAY99_ANALYZE_FUNCTIONS) {
+                $this->function_mem = memory_get_usage();
+
+                foreach ($wp_filter['after_setup_theme']->callbacks as $priority => $functions) {
+                    if ($priority == -1 || $priority == 10000)
+                        continue;
+                    $new_functions = [];
+                    foreach ($functions as $function) {
+                        $new_functions[] = $function;
+                        $x = $this->function_to_string($function);
+                        $new_functions[] = ['function' => function() use ($x) {
+                                $this->log($x . ' - ' . size_format(memory_get_usage() - $this->function_mem, 1));
+                                $this->function_mem = memory_get_usage();
+                            }, 'accepted_args' => 1];
+                    }
+                    $wp_filter['after_setup_theme']->callbacks[$priority] = $new_functions;
+                }
+            }
         }, -1);
 
         add_action('after_setup_theme', function () {
@@ -102,27 +157,37 @@ class Say99 {
 
         add_action('init', function () {
             global $wp_filter;
+            $this->log(self::SEPARATOR);
             $this->log('init: start');
-            return;
+            $this->current_mem = memory_get_usage();
+
             //$this->log_callbacks('init');
-            foreach ($wp_filter['init']->callbacks as $priority => $functions) {
-                if ($priority == -1)
-                    continue;
-                $new_functions = [];
-                foreach ($functions as $function) {
-                    $new_functions[] = $function;
-                    $new_functions[] = ['function' => 'echo_mem', 'accepted_args' => 1];
+            if (SAY99_ANALYZE_FUNCTIONS) {
+                $this->function_mem = memory_get_usage();
+                foreach ($wp_filter['init']->callbacks as $priority => $functions) {
+                    if ($priority == -1 || $priority == 10000)
+                        continue;
+                    $new_functions = [];
+                    foreach ($functions as $function) {
+                        $new_functions[] = $function;
+                        $x = $this->function_to_string($function);
+                        $new_functions[] = ['function' => function() use ($x) {
+                                $this->log($x . ' - ' . size_format(memory_get_usage() - $this->function_mem, 1));
+                                $this->function_mem = memory_get_usage();
+                            }, 'accepted_args' => 1];
+                    }
+                    $wp_filter['init']->callbacks[$priority] = $new_functions;
                 }
-                $wp_filter['init']->callbacks[$priority] = $new_functions;
             }
         }, -1);
 
         add_action('init', function () {
-            $this->log('init');
+            $this->log('init: end - ' . size_format(memory_get_usage() - $this->current_mem, 1));
             //$this->log_callbacks('init');
         }, 10000);
 
         add_action('wp_loaded', function () {
+            $this->log(self::SEPARATOR);
             $this->log('wp_loaded');
         }, 10000);
 
@@ -157,6 +222,25 @@ class Say99 {
             $this->log('Starting event: ' . $hook);
             return $value;
         }, 10000, 4);
+
+        $this->extra_hooks();
+    }
+
+    function extra_hooks() {
+        $this->add_hook('td_wp_booster_loaded');
+        $this->add_hook('td_wp_booster_legacy');
+    }
+
+    function add_hook($hook) {
+        add_action($hook, function () use ($hook) {
+            $this->current_mem = memory_get_usage();
+            $this->log(self::SEPARATOR);
+            $this->log($hook . ': start');
+        }, -1);
+
+        add_action($hook, function () use ($hook) {
+            $this->log($hook . ': end - ' . size_format(memory_get_usage() - $this->current_mem, 1));
+        }, 10000);
     }
 
     function log_callbacks($tag) {
@@ -200,7 +284,11 @@ class Say99 {
         } else {
             if (is_object($function['function'])) {
                 $fn = new ReflectionFunction($function['function']);
-                $b .= get_class($fn->getClosureThis()) . '(closure)';
+                if ($fn->getClosureThis() == null) {
+                    $b .= 'Anonymous closure';
+                } else {
+                    $b .= get_class($fn->getClosureThis()) . '(closure)';
+                }
             } else {
                 $b .= $function['function'];
             }
